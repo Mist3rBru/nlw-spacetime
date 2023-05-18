@@ -3,8 +3,13 @@ import { z } from 'zod'
 import { db } from '../infra/db'
 
 export default (app: FastifyInstance): void => {
-  app.get('/memories', async () => {
+  app.get('/memories', async req => {
+    await req.jwtVerify()
+
     const memories = await db.memory.findMany({
+      where: {
+        userId: req.user.sub
+      },
       orderBy: {
         createdAt: 'asc'
       }
@@ -17,49 +22,63 @@ export default (app: FastifyInstance): void => {
     }))
   })
 
-  app.get('/memories/:id', async req => {
-    const { id } = z
-      .object({
-        id: z.string()
-      })
-      .parse(req.params)
+  app.get('/memories/:id', async (req, reply) => {
+    await req.jwtVerify()
+
+    const paramsSchema = z.object({
+      id: z.string()
+    })
+    const { id } = paramsSchema.parse(req.params)
 
     const memory = await db.memory.findUniqueOrThrow({
       where: {
         id
       }
     })
+    if (!memory.isPublic && memory.userId !== req.user.sub) {
+      return reply.status(401).send()
+    }
 
     return memory
   })
 
   app.post('/memories', async req => {
-    const data = z
-      .object({
-        userId: z.string(),
-        content: z.string(),
-        coverUrl: z.string(),
-        isPublic: z.coerce.boolean().default(false)
-      })
-      .parse(req.body)
+    await req.jwtVerify()
+
+    const bodySchema = z.object({
+      userId: z.string(),
+      content: z.string(),
+      coverUrl: z.string(),
+      isPublic: z.coerce.boolean().default(false)
+    })
+    const data = bodySchema.parse(req.body)
 
     await db.memory.create({ data })
   })
 
-  app.put('/memories/:id', async req => {
-    const { id } = z
-      .object({
-        id: z.string().nonempty()
-      })
-      .parse(req.params)
+  app.put('/memories/:id', async (req, reply) => {
+    await req.jwtVerify()
 
-    const data = z
-      .object({
-        content: z.string(),
-        coverUrl: z.string(),
-        isPublic: z.coerce.boolean().default(false)
-      })
-      .parse(req.body)
+    const paramsSchema = z.object({
+      id: z.string()
+    })
+    const { id } = paramsSchema.parse(req.params)
+
+    const memory = await db.memory.findUniqueOrThrow({
+      where: {
+        id
+      }
+    })
+    if (memory.userId !== req.user.sub) {
+      return reply.status(401).send()
+    }
+
+    const bodySchema = z.object({
+      content: z.string(),
+      coverUrl: z.string(),
+      isPublic: z.coerce.boolean().default(false)
+    })
+    const data = bodySchema.parse(req.body)
 
     await db.memory.update({
       data,
@@ -69,12 +88,22 @@ export default (app: FastifyInstance): void => {
     })
   })
 
-  app.delete('/memories/:id', async req => {
-    const { id } = z
-      .object({
-        id: z.string().nonempty()
-      })
-      .parse(req.params)
+  app.delete('/memories/:id', async (req, reply) => {
+    await req.jwtVerify()
+
+    const paramsSchema = z.object({
+      id: z.string()
+    })
+    const { id } = paramsSchema.parse(req.params)
+
+    const memory = await db.memory.findUniqueOrThrow({
+      where: {
+        id
+      }
+    })
+    if (memory.userId !== req.user.sub) {
+      return reply.status(401).send()
+    }
 
     await db.memory.delete({
       where: {

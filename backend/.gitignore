@@ -2,3 +2,5 @@ node_modules/
 
 prisma/dev.*
 
+.env*
+!.env.example
